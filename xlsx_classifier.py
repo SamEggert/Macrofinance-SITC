@@ -3,6 +3,7 @@ from pathlib import Path
 import sqlite3
 from tqdm import tqdm
 from classifier import process_batch
+import argparse
 
 def process_excel_file(input_path, output_path=None, batch_size=10):
     """Process an Excel file and add SITC classifications"""
@@ -61,6 +62,10 @@ def process_excel_file(input_path, output_path=None, batch_size=10):
     return output_path
 
 if __name__ == "__main__":
-    input_file = "test 250212.xlsx"  # Place this file in the data folder
-    output_file = process_excel_file(input_file)
+    # Add command-line argument parsing
+    parser = argparse.ArgumentParser(description='Process Excel file and add SITC classifications')
+    parser.add_argument('input_file', help='Name of the Excel file to process (should be in the data folder)')
+    args = parser.parse_args()
+
+    output_file = process_excel_file(args.input_file)
     print(f"\nClassification complete. Results saved to: {output_file}")

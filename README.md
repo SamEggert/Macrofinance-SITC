@@ -1,4 +1,3 @@
-
 # Macrofinance-SITC
 
 A tool for classifying trade descriptions into Standard International Trade Classification (SITC) categories using OpenAI's language models.
@@ -20,7 +19,7 @@ A tool for classifying trade descriptions into Standard International Trade Clas
 Place your Excel file in the `data` directory and run:
 
 ```
-python xlsx_classifier.py
+python3 xlsx_classifier.py "your_file.xlsx"
 ```
 
 The script will process each sheet, looking for a "Description" column, and add "SITC_Code" and "SITC_Description" columns to the output file.
