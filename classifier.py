@@ -144,7 +144,7 @@ def clean_code_for_level(code):
     """Remove periods from code and return the length as the level"""
     return code.replace('.', '')
 
-def classify_description(description, conn, num_attempts=3, max_depth=5):
+def classify_description(description, conn, num_attempts=3, max_depth=4):
     cursor = conn.cursor()
     full_attempts = []
     first_attempt_codes = set()  # Store ALL codes from first attempt's path
@@ -208,7 +208,7 @@ def classify_description(description, conn, num_attempts=3, max_depth=5):
                         print(f"Found terminal code below max depth: {selected_code}")
 
                     # Stop if we've reached the max depth
-                    if len(clean_code) >= max_depth:
+                    if current_level >= max_depth:
                         break
 
                     current_level += 1
@@ -294,10 +294,10 @@ def process_batch(descriptions, conn, num_attempts=3, max_depth=4):
 
 if __name__ == "__main__":
     # Example usage
-    description = "Mechanically propelled rollers."
+    description = "Almonds"
     conn = sqlite3.connect("sitc.db")
 
-    code, desc = classify_description(description, conn, num_attempts=3, max_depth=5)
+    code, desc = classify_description(description, conn, num_attempts=3, max_depth=4)
     print("\n=== FINAL RESULT ===")
     print(f"Description: {description}")
     print(f"Classification: {code}")
