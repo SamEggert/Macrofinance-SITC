@@ -64,10 +64,13 @@ def get_examples_for_level(cursor, level, parent_code=None):
         """, (level,))
     return cursor.fetchall()
 
-def create_gpt_prompt(description, options, examples, previous_classifications=None, excluded_options=None):
+def create_gpt_prompt(description, options, examples, previous_classifications=None, excluded_options=None, recent_classifications=None):
+    """Create a prompt for GPT classification with context from recent classifications"""
     template = """You are a trade classification expert. Your task is to classify the following Spanish description into the most appropriate SITC category at the current level:
 
 Description to classify: {description}
+
+{recent_context}
 
 Available options:
 {formatted_options}
@@ -78,9 +81,10 @@ Available options:
 
 {attempt_guidance}
 
-IMPORTANT: Respond with ONLY a single letter from A-{last_letter}.
-Do not include any explanations, colons, periods, or the category description.
-For example, respond with just 'A' or 'B', not 'A.' or 'B: category name'."""
+IMPORTANT:
+1. Items that appear close to each other in the list often have similar classifications, especially in their first two digits.
+2. Respond with ONLY a single letter from A-{last_letter}.
+Do not include any explanations, colons, periods, or the category description."""
 
     letters = list(string.ascii_uppercase)
     option_map = {}
@@ -103,6 +107,14 @@ For example, respond with just 'A' or 'B', not 'A.' or 'B: category name'."""
         letter = letters[i]
         formatted_options += f"{letter}. {code}: {desc}\n"
         option_map[letter] = i
+
+    # Format recent classifications context
+    recent_context = ""
+    if recent_classifications:
+        recent_context = "Recent classifications from the same list:\n"
+        for rc in recent_classifications:
+            recent_context += f"- '{rc['description']}' was classified as {rc['code']}: {rc['sitc_description']}\n"
+        recent_context += "\nNote: Items in the same list often have similar classifications, especially in their first two digits.\n"
 
     examples_section = ""
     if examples:
@@ -128,10 +140,12 @@ For example, respond with just 'A' or 'B', not 'A.' or 'B: category name'."""
         examples_section=examples_section,
         previous_section=previous_section,
         attempt_guidance=attempt_guidance,
-        last_letter=letters[min(len(available_options)-1, len(letters)-1)]
+        last_letter=letters[min(len(available_options)-1, len(letters)-1)],
+        recent_context=recent_context
     )
 
     return formatted_prompt, option_map
+
 
 def clean_gpt_response(response):
     """Clean GPT response to get only the letter"""
@@ -144,13 +158,19 @@ def clean_code_for_level(code):
     """Remove periods from code and return the length as the level"""
     return code.replace('.', '')
 
-def classify_description(description, conn, num_attempts=3, max_depth=4):
+def classify_description(description, conn, num_attempts=3, max_depth=4, recent_classifications=None):
     cursor = conn.cursor()
     full_attempts = []
     first_attempt_codes = set()  # Store ALL codes from first attempt's path
     terminal_codes = set()  # Store terminal codes that haven't reached max depth
 
     print(f"\nClassifying: {description}")
+
+    # If we have recent classifications, print them for debugging
+    if recent_classifications:
+        print("\nRecent classifications:")
+        for rc in recent_classifications:
+            print(f"- {rc['description']}: {rc['code']}")
 
     for attempt_num in range(num_attempts):
         current_level = 1
@@ -182,7 +202,8 @@ def classify_description(description, conn, num_attempts=3, max_depth=4):
                     options,
                     examples,
                     history,
-                    excluded_options=excluded_options
+                    excluded_options=excluded_options,
+                    recent_classifications=recent_classifications
                 )
 
                 response = llm.invoke(prompt)
@@ -270,19 +291,34 @@ Do not include any explanations, colons, periods, or the category description.""
     # Fallback to first attempt if something goes wrong
     return full_attempts[0]
 
+
 def process_batch(descriptions, conn, num_attempts=3, max_depth=4):
     """Process a batch of descriptions and return results"""
     results = []
+    recent_classifications = []  # Store recent classifications for context
+    context_window = 3  # Number of previous classifications to consider
 
     for idx, description in enumerate(descriptions, 1):
         print(f"\n\n==== Processing item {idx}/{len(descriptions)} ====")
         print(f"Description: {description}")
 
-        code, desc = classify_description(description, conn, num_attempts, max_depth)
+        code, desc = classify_description(
+            description,
+            conn,
+            num_attempts,
+            max_depth,
+            recent_classifications
+        )
 
-        print(f"\nFinal classification result:")
-        print(f"Code: {code}")
-        print(f"Description: {desc}")
+        # Update recent classifications
+        recent_classifications.append({
+            "description": description,
+            "code": code,
+            "sitc_description": desc
+        })
+        # Keep only the most recent classifications
+        if len(recent_classifications) > context_window:
+            recent_classifications.pop(0)
 
         results.append({
             "description": description,
@@ -291,6 +327,7 @@ def process_batch(descriptions, conn, num_attempts=3, max_depth=4):
         })
 
     return results
+
 
 if __name__ == "__main__":
     # Example usage
